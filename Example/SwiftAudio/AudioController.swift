@@ -37,10 +37,16 @@ class AudioController {
             .changePlaybackPosition
         ]
         try? audioSessionController.set(category: .playback)
+        let asset = AssetPersistenceManager.sharedManager.localAssetForStream(withName: "hello")
+        let item = DefaultAudioItem(audioUrl: "", sourceType: .file, urlAsset: asset)
+        
+        try? player.add(items: [item], playWhenReady: false)
+
         player.repeatMode = .queue
         DispatchQueue.main.async {
             self.player.add(items: self.sources)
         }
+
     }
     
 }

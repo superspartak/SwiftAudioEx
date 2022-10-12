@@ -30,10 +30,12 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
     private let playerItemObserver = AVPlayerItemObserver()
     fileprivate var timeToSeekToAfterLoading: TimeInterval?
     fileprivate var asset: AVAsset? = nil
-    fileprivate var item: AVPlayerItem? = nil
+    fileprivate var item: AudioItem? = nil
+    fileprivate var playerItem: AVPlayerItem? = nil
     fileprivate var url: URL? = nil
     fileprivate var urlOptions: [String: Any]? = nil
     fileprivate let stateQueue = DispatchQueue(
+    fileprivate var pendingAsset: AVAsset? = nil
         label: "AVPlayerWrapper.stateQueue",
         attributes: .concurrent
     )
@@ -234,7 +236,11 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         }
         if let url = url {
             let keys = ["playable"]
-            let pendingAsset = AVURLAsset(url: url, options: urlOptions)
+            if let urlAsset = from.getURLAsset()  {
+                pendingAsset = urlAsset
+            }else if let url = from.getUrl(){
+                pendingAsset = AVURLAsset(url: url, options: options)
+            }
             asset = pendingAsset
             state = .loading
             pendingAsset.loadValuesAsynchronously(forKeys: keys, completionHandler: { [weak self] in
@@ -294,20 +300,20 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         }
     }
     
-    func load(from url: URL, playWhenReady: Bool, options: [String: Any]? = nil) {
+    func load(from item: AudioItem, playWhenReady: Bool, options: [String: Any]? = nil) {
         self.playWhenReady = playWhenReady
-        self.url = url
+        self.item = item
         self.urlOptions = options
         self.load()
     }
     
     func load(
-        from url: URL,
+        from item: AudioItem,
         playWhenReady: Bool,
         initialTime: TimeInterval? = nil,
         options: [String : Any]? = nil
     ) {
-        self.load(from: url, playWhenReady: playWhenReady, options: options)
+        self.load(from: item, playWhenReady: playWhenReady, options: options)
         if let initialTime = initialTime {
             self.seek(to: initialTime)
         }
@@ -367,8 +373,8 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
     }
     
     private func startObservingAVPlayer(item: AVPlayerItem) {
-        playerItemObserver.startObserving(item: item)
-        playerItemNotificationObserver.startObserving(item: item)
+        playerItemObserver.startObserving(item: playerItem)
+        playerItemNotificationObserver.startObserving(item: playerItem)
     }
 
     private func stopObservingAVPlayerItem() {
@@ -434,7 +440,7 @@ extension AVPlayerWrapper: AVPlayerObserverDelegate {
     
     func player(statusDidChange status: AVPlayer.Status) {
         if (status == .failed) {
-            let error = item!.error as NSError?
+            let error = playerItem!.error as NSError?
             playbackFailed(error: error?.code == URLError.notConnectedToInternet.rawValue
                  ? AudioPlayerError.PlaybackError.notConnectedToInternet
                  : AudioPlayerError.PlaybackError.playbackFailed
