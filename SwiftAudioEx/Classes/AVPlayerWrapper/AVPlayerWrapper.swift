@@ -34,8 +34,8 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
     fileprivate var playerItem: AVPlayerItem? = nil
     fileprivate var url: URL? = nil
     fileprivate var urlOptions: [String: Any]? = nil
-    fileprivate let stateQueue = DispatchQueue(
     fileprivate var pendingAsset: AVAsset? = nil
+    fileprivate let stateQueue = DispatchQueue(
         label: "AVPlayerWrapper.stateQueue",
         attributes: .concurrent
     )
@@ -234,70 +234,73 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         } else {
             clearCurrentItem()
         }
-        if let url = url {
-            let keys = ["playable"]
-            if let urlAsset = from.getURLAsset()  {
-                pendingAsset = urlAsset
-            }else if let url = from.getUrl(){
-                pendingAsset = AVURLAsset(url: url, options: options)
-            }
-            asset = pendingAsset
-            state = .loading
-            pendingAsset.loadValuesAsynchronously(forKeys: keys, completionHandler: { [weak self] in
-                guard let self = self else { return }
+        
+        let keys = ["playable"]
+    
+        if let urlAsset = self.item?.getURLAsset()  {
+            pendingAsset = urlAsset
+        }else if let url = self.item?.getUrl(){
+            pendingAsset = AVURLAsset(url: url, options: urlOptions)
+        }
+        
+        asset = pendingAsset
+        state = .loading
+        
+        
+        asset?.loadValuesAsynchronously(forKeys: keys, completionHandler: { [weak self] in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                if (pendingAsset != self.asset) { return; }
                 
-                DispatchQueue.main.async {
-                    if (pendingAsset != self.asset) { return; }
-                    
-                    for key in keys {
-                        var error: NSError?
-                        let keyStatus = pendingAsset.statusOfValue(forKey: key, error: &error)
-                        switch keyStatus {
-                        case .failed:
-                            self.playbackFailed(error: AudioPlayerError.PlaybackError.failedToLoadKeyValue)
-                            return
-                        case .cancelled, .loading, .unknown:
-                            return
-                        case .loaded:
-                            break
-                        default: break
-                        }
-                    }
-                    
-                    if (!pendingAsset.isPlayable) {
-                        self.playbackFailed(error: AudioPlayerError.PlaybackError.itemWasUnplayable)
-                        return;
-                    }
-                    
-                    let item = AVPlayerItem(
-                        asset: pendingAsset,
-                        automaticallyLoadedAssetKeys: keys
-                    )
-                    self.item = item;
-                    item.preferredForwardBufferDuration = self.bufferDuration
-                    self.avPlayer.replaceCurrentItem(with: item)
-                    self.startObservingAVPlayer(item: item)
-                    self.applyAVPlayerRate()
-                    if pendingAsset.availableChapterLocales.count > 0 {
-                        for locale in pendingAsset.availableChapterLocales {
-                            let chapters = pendingAsset.chapterMetadataGroups(withTitleLocale: locale, containingItemsWithCommonKeys: nil)
-                            self.delegate?.AVWrapper(didReceiveMetadata: chapters)
-                        }
-                    } else {
-                        for format in pendingAsset.availableMetadataFormats {
-                            let timeRange = CMTimeRange(start: CMTime(seconds: 0, preferredTimescale: 1000), end: pendingAsset.duration)
-                            let group = AVTimedMetadataGroup(items: pendingAsset.metadata(forFormat: format), timeRange: timeRange)
-                            self.delegate?.AVWrapper(didReceiveMetadata: [group])
-                        }
-                    }
-                    
-                    if let initialTime = self.timeToSeekToAfterLoading {
-                        self.timeToSeekToAfterLoading = nil
-                        self.seek(to: initialTime)
+                for key in keys {
+                    var error: NSError?
+                    let keyStatus = asset?.statusOfValue(forKey: key, error: &error)
+                    switch keyStatus {
+                    case .failed:
+                        self.playbackFailed(error: AudioPlayerError.PlaybackError.failedToLoadKeyValue)
+                        return
+                    case .cancelled, .loading, .unknown:
+                        return
+                    case .loaded:
+                        break
+                    default: break
                     }
                 }
-            })
-        }
+                
+                if (!asset?.isPlayable) {
+                    self.playbackFailed(error: AudioPlayerError.PlaybackError.itemWasUnplayable)
+                    return;
+                }
+                
+                let item = AVPlayerItem(
+                    asset: pendingAsset,
+                    automaticallyLoadedAssetKeys: keys
+                )
+                self.item = item;
+                item.preferredForwardBufferDuration = self.bufferDuration
+                self.avPlayer.replaceCurrentItem(with: item)
+                self.startObservingAVPlayer(item: item)
+                self.applyAVPlayerRate()
+                if pendingAsset.availableChapterLocales.count > 0 {
+                    for locale in pendingAsset.availableChapterLocales {
+                        let chapters = pendingAsset.chapterMetadataGroups(withTitleLocale: locale, containingItemsWithCommonKeys: nil)
+                        self.delegate?.AVWrapper(didReceiveMetadata: chapters)
+                    }
+                } else {
+                    for format in pendingAsset.availableMetadataFormats {
+                        let timeRange = CMTimeRange(start: CMTime(seconds: 0, preferredTimescale: 1000), end: pendingAsset.duration)
+                        let group = AVTimedMetadataGroup(items: pendingAsset.metadata(forFormat: format), timeRange: timeRange)
+                        self.delegate?.AVWrapper(didReceiveMetadata: [group])
+                    }
+                }
+                
+                if let initialTime = self.timeToSeekToAfterLoading {
+                    self.timeToSeekToAfterLoading = nil
+                    self.seek(to: initialTime)
+                }
+            }
+        })
     }
     
     func load(from item: AudioItem, playWhenReady: Bool, options: [String: Any]? = nil) {
@@ -373,8 +376,9 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
     }
     
     private func startObservingAVPlayer(item: AVPlayerItem) {
-        playerItemObserver.startObserving(item: playerItem)
-        playerItemNotificationObserver.startObserving(item: playerItem)
+        let item = playerItem!
+        playerItemObserver.startObserving(item: item)
+        playerItemNotificationObserver.startObserving(item: item)
     }
 
     private func stopObservingAVPlayerItem() {
