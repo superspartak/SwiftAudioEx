@@ -162,7 +162,7 @@ public class AudioPlayer: AVPlayerWrapperDelegate {
      - parameter item: The AudioItem to load. The info given in this item is the one used for the InfoCenter.
      - parameter playWhenReady: Optional, whether to start playback when the item is ready.
      */
-    public func load(item: AudioItem, playWhenReady: Bool = true) throws {
+    public func load(item: AudioItem, playWhenReady: Bool = true) {
         wrapper.load(from: item,
                      playWhenReady: playWhenReady,
                      initialTime: (item as? InitialTiming)?.getInitialTime(),
