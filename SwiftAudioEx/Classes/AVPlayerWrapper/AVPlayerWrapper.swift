@@ -34,7 +34,6 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
     fileprivate var playerItem: AVPlayerItem? = nil
     fileprivate var url: URL? = nil
     fileprivate var urlOptions: [String: Any]? = nil
-    fileprivate var pendingAsset: AVAsset? = nil
     fileprivate let stateQueue = DispatchQueue(
         label: "AVPlayerWrapper.stateQueue",
         attributes: .concurrent
@@ -234,21 +233,25 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
         } else {
             clearCurrentItem()
         }
-        if let url = url {
+        if let item = item {
+            
+            var pendingAsset: AVURLAsset;
         
             let keys = ["playable"]
         
-            if let urlAsset = self.item?.getURLAsset()  {
+            if let urlAsset = item.getURLAsset()  {
                 pendingAsset = urlAsset
-            }else if let url = self.item?.getUrl(){
+            }else if let url = item.getUrl(){
                 pendingAsset = AVURLAsset(url: url, options: urlOptions)
+            } else {
+                pendingAsset = AVURLAsset(url: url!, options: urlOptions)
             }
             
             asset = pendingAsset
             state = .loading
             
             
-            asset?.loadValuesAsynchronously(forKeys: keys, completionHandler: { [weak self] in
+            pendingAsset.loadValuesAsynchronously(forKeys: keys, completionHandler: { [weak self] in
                 guard let self = self else { return }
                 
                 DispatchQueue.main.async {
@@ -256,7 +259,7 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
                     
                     for key in keys {
                         var error: NSError?
-                        let keyStatus = asset?.statusOfValue(forKey: key, error: &error)
+                        let keyStatus = pendingAsset.statusOfValue(forKey: key, error: &error)
                         switch keyStatus {
                         case .failed:
                             self.playbackFailed(error: AudioPlayerError.PlaybackError.failedToLoadKeyValue)
@@ -269,7 +272,7 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
                         }
                     }
                     
-                    if (!asset?.isPlayable) {
+                    if (!pendingAsset.isPlayable) {
                         self.playbackFailed(error: AudioPlayerError.PlaybackError.itemWasUnplayable)
                         return;
                     }
@@ -278,7 +281,7 @@ class AVPlayerWrapper: AVPlayerWrapperProtocol {
                         asset: pendingAsset,
                         automaticallyLoadedAssetKeys: keys
                     )
-                    self.item = item;
+                    self.playerItem = item;
                     item.preferredForwardBufferDuration = self.bufferDuration
                     self.avPlayer.replaceCurrentItem(with: item)
                     self.startObservingAVPlayer(item: item)
