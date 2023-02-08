@@ -170,9 +170,9 @@ public class AudioPlayer: AVPlayerWrapperDelegate {
         
         currentItem = item
 
-        if let playWhenReady = playWhenReady {
-            self.playWhenReady = playWhenReady
-        }
+        // if let playWhenReady = playWhenReady {
+        //     self.playWhenReady = playWhenReady
+        // }
 
         if (automaticallyUpdateNowPlayingInfo) {
             // Reset playback values without updating, because that will happen in
